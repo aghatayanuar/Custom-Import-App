@@ -28,6 +28,9 @@ app_license = "mit"
 # app_include_css = "/assets/custom_import_app/css/custom_import_app.css"
 # app_include_js = "/assets/custom_import_app/js/custom_import_app.js"
 
+app_include_js = "/assets/custom_import_app/js/tabulator.min.js"
+app_include_css = "/assets/custom_import_app/css/tabulator.min.css"
+
 # include js, css files in header of web template
 # web_include_css = "/assets/custom_import_app/css/custom_import_app.css"
 # web_include_js = "/assets/custom_import_app/js/custom_import_app.js"
@@ -47,6 +50,11 @@ app_license = "mit"
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
+
+doctype_js = {
+    "Custom Import App": "custom_import_app/custom_import_app/custom_import_app/custom_import_app.js"
+}
+
 
 # Svg Icons
 # ------------------
