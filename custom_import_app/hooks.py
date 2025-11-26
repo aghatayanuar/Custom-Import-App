@@ -29,6 +29,10 @@ app_license = "mit"
 # app_include_js = "/assets/custom_import_app/js/custom_import_app.js"
 
 app_include_js = "/assets/custom_import_app/js/tabulator.min.js"
+app_include_js = [
+    "/assets/custom_import_app/js/tabulator.min.js",
+    "/assets/custom_import_app/js/custom.js"
+]
 app_include_css = "/assets/custom_import_app/css/tabulator.min.css"
 
 # include js, css files in header of web template

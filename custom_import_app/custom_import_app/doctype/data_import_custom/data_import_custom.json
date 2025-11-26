@@ -62,6 +62,7 @@
   {
    "fieldname": "section_import_preview",
    "fieldtype": "Section Break",
+   "hidden": 1,
    "label": "Preview"
   },
   {
@@ -169,7 +170,7 @@
  ],
  "hide_toolbar": 1,
  "links": [],
- "modified": "2025-11-18 09:19:12.240763",
+ "modified": "2025-11-25 14:08:50.658221",
  "modified_by": "Administrator",
  "module": "Custom Import App",
  "name": "Data Import Custom",

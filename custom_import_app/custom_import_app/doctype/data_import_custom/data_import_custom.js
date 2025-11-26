@@ -93,6 +93,24 @@ frappe.ui.form.on("Data Import Custom", {
 				frappe.set_route("List", frm.doc.reference_doctype)
 			);
 		}
+
+		/////////////////stop
+		
+		if (frm.doc.status === "Preprocessing" || frm.doc.status === "Running") {
+            frm.add_custom_button("Stop Import", function () {
+                frappe.call({
+                    method: "custom_import_app.custom_import_app.doctype.data_import_custom.data_import_custom.stop_import",
+                    args: { data_import: frm.doc.name },
+                    callback() {
+                        frappe.show_alert("Stopping import...");
+
+						setTimeout(() => frm.refresh(), 3000);
+                    }
+                });
+            });
+        }
+
+		//////////
 	},
 
 	onload_post_render(frm) {
@@ -128,6 +146,7 @@ frappe.ui.form.on("Data Import Custom", {
 					frm.events.start_import(frm);
 					frappe.msgprint("Start Processing Import");
 					frm.trigger("show_import_status");
+					frm.refresh();
 				});
 				frm.page.btn_primary?.removeClass("hidden"); 
 			} else {
@@ -152,6 +171,13 @@ frappe.ui.form.on("Data Import Custom", {
 	},
 
 	show_import_status(frm) {
+
+		if (frm.doc.status=="Preprocessing"){
+			message = "pre-processing data...";
+			frm.dashboard.set_headline(message);
+			return;
+		} 
+
 		frappe.call({
 			method: "custom_import_app.custom_import_app.doctype.data_import_custom.data_import_custom.get_import_status",
 			args: {
@@ -162,7 +188,6 @@ frappe.ui.form.on("Data Import Custom", {
 				let failed_records = cint(r.message.failed);
 				let total_records = cint(r.message.total_records);
 
-				if (!total_records) return;
 				let action, message;
 				if (frm.doc.import_type === "Insert New Records") {
 					action = "imported";
@@ -226,18 +251,29 @@ frappe.ui.form.on("Data Import Custom", {
 		}
 	},
 
+	// start_import(frm) {
+	// 	frm.call({
+	// 		method: "form_start_import",
+	// 		args: { data_import: frm.doc.name },
+	// 		btn: frm.page.btn_primary,
+	// 	}).then((r) => {
+	// 		if (r.message === true) {
+	// 			// frm.disable_save();
+	// 		}
+	// 		frm.disable_save();
+	// 	});
+	// },
+
 	start_import(frm) {
 		frm.call({
-			method: "form_start_import",
+			method: "custom_import_app.custom_import_app.doctype.data_import_custom.data_import_custom.form_start_import",
 			args: { data_import: frm.doc.name },
 			btn: frm.page.btn_primary,
 		}).then((r) => {
-			if (r.message === true) {
-				// frm.disable_save();
-			}
 			frm.disable_save();
 		});
 	},
+
 
 	download_template(frm) {
 		frappe.require("data_import_tools.bundle.js", () => {
@@ -276,37 +312,37 @@ frappe.ui.form.on("Data Import Custom", {
 	},
 
 	import_file(frm) {
-		frm.toggle_display("section_import_preview", frm.has_import_file());
+		// frm.toggle_display("section_import_preview", frm.has_import_file());
 		if (!frm.has_import_file()) {
-			frm.get_field("import_preview").$wrapper.empty();
+			// frm.get_field("import_preview").$wrapper.empty();
 			return;
 		} else {
 			frm.trigger("update_primary_action");
 		}
 
 		// load import preview
-		frm.get_field("import_preview").$wrapper.empty();
-		$('<span class="text-muted">')
-			.html(__("Loading import file..."))
-			.appendTo(frm.get_field("import_preview").$wrapper);
+		// frm.get_field("import_preview").$wrapper.empty();
+		// $('<span class="text-muted">')
+		// 	.html(__("Loading import file..."))
+		// 	.appendTo(frm.get_field("import_preview").$wrapper);
 
-		frm.call({
-			method: "get_preview_from_template",
-			args: {
-				data_import: frm.doc.name,
-				import_file: frm.doc.import_file,
-				google_sheets_url: frm.doc.google_sheets_url,
-			},
-			error_handlers: {
-				TimestampMismatchError() {
-					// ignore this error
-				},
-			},
-		}).then((r) => {
-			let preview_data = r.message;
-			frm.events.show_import_preview(frm, preview_data);
-			frm.events.show_import_warnings(frm, preview_data);
-		});
+		// frm.call({
+		// 	method: "get_preview_from_template",
+		// 	args: {
+		// 		data_import: frm.doc.name,
+		// 		import_file: frm.doc.import_file,
+		// 		google_sheets_url: frm.doc.google_sheets_url,
+		// 	},
+		// 	error_handlers: {
+		// 		TimestampMismatchError() {
+		// 			// ignore this error
+		// 		},
+		// 	},
+		// }).then((r) => {
+		// 	let preview_data = r.message;
+		// 	frm.events.show_import_preview(frm, preview_data);
+		// 	frm.events.show_import_warnings(frm, preview_data);
+		// });
 	},
 
 	show_import_preview(frm, preview_data) {

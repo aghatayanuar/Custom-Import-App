@@ -17,6 +17,8 @@ from frappe.utils.xlsxutils import (
 	read_xls_file_from_attached_file,
 	read_xlsx_file_from_attached_file,
 )
+import itertools
+
 
 INVALID_VALUES = ("", None)
 MAX_ROWS_IN_PREVIEW = 10
@@ -564,6 +566,85 @@ class ImportFile:
 		doc = parent_doc
 
 		return doc, rows, data[len(rows) :]
+
+	def get_payloads_for_import_batch(self, data_iter, batch_start=0, batch_size=100):
+		"""
+		Return a batch of payloads (docs + rows) from an iterator of import data.
+		- data_iter: iterator of all rows
+		- batch_start: start index of the payload (skip first batch_start docs)
+		- batch_size: number of docs in this batch
+		"""
+		payloads = []
+		current_index = 0
+
+		# skip sampai batch_start
+		while current_index < batch_start:
+			try:
+				_, _, data_iter = self.parse_next_row_for_import_iterator(data_iter)
+				current_index += 1
+			except StopIteration:
+				return payloads, data_iter  # sudah habis
+
+		# ambil batch_size payload
+		while current_index < batch_start + batch_size:
+			try:
+				doc, rows, data_iter = self.parse_next_row_for_import_iterator(data_iter)
+				payloads.append(frappe._dict(doc=doc, rows=rows))
+				current_index += 1
+			except StopIteration:
+				break
+
+		return payloads, data_iter
+
+
+	def parse_next_row_for_import_iterator(self, data_iter):
+		"""
+		Streaming version of parse_next_row_for_import.
+		Returns: parent_doc, rows, data_iter
+		"""
+		doctypes = self.header.doctypes
+
+		try:
+			first_row = next(data_iter)
+		except StopIteration:
+			raise StopIteration
+
+		rows = [first_row]
+
+		# jika ada child table
+		if len(doctypes) > 1:
+			parent_column_indexes = self.header.get_column_indexes(self.doctype)
+
+			while True:
+				try:
+					peek = next(data_iter)
+				except StopIteration:
+					break
+
+				row_values = peek.get_values(parent_column_indexes)
+				if all(v in INVALID_VALUES for v in row_values):
+					rows.append(peek)
+				else:
+					data_iter = itertools.chain([peek], data_iter)
+					break
+
+		parent_doc = None
+		for row in rows:
+			for doctype, table_df in doctypes:
+				# parent doc
+				if doctype == self.doctype and parent_doc is None:
+					parent_doc = row.parse_doc(doctype)
+
+				# child doc
+				elif doctype != self.doctype and table_df:
+					child_doc = row.parse_doc(doctype, parent_doc, table_df)
+					if child_doc is None:
+						continue
+					parent_doc.setdefault(table_df.fieldname, [])
+					parent_doc[table_df.fieldname].append(child_doc)
+
+		return parent_doc, rows, data_iter
+
 
 	def get_warnings(self):
 		warnings = []
