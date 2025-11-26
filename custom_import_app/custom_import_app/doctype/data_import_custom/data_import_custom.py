@@ -350,7 +350,7 @@ def export_csv(doctype, path):
 		csvfile.write(frappe.response.result.encode("utf-8"))
 
 @frappe.whitelist()
-def form_start_import(data_import: str, batch_size: int = 10):
+def form_start_import(data_import: str, batch_size: int = 25):
 	di = frappe.get_doc("Data Import Custom", data_import)
 	di.check_permission("write")
 
