@@ -171,61 +171,72 @@ frappe.ui.form.on("Data Import Custom", {
 	},
 
 	show_import_status(frm) {
+		let statusMessage = ""; 
+		let jobMessage = "";    
 
-		if (frm.doc.status=="Preprocessing"){
-			message = "pre-processing data...";
-			frm.dashboard.set_headline(message);
-			return;
-		} 
+		if (frm.doc.status=="Preprocessing" || frm.doc.status=="Running") {
+			frappe.call({
+				method: "custom_import_app.custom_import_app.doctype.data_import_custom.data_import_custom.get_running_import_job",
+				callback: function(r) {
+					let jobMessage = "";
+					let statusMessage = "";
+
+					if (r.message) {
+						let job_id = r.message.job_id;
+						let elapsed = r.message.elapsed_seconds;
+
+						let minutes = Math.floor(elapsed / 60);
+						let seconds = elapsed % 60;
+
+						jobMessage = `(Job ID: ${job_id}, running ${minutes}m ${seconds}s)`;
+					}
+
+					statusMessage = frm.doc.status=="Preprocessing"
+						? "Pre-processing data..."
+						: frm.doc.status=="Running"
+							? "Import sedang berjalan…"
+							: "";
+
+					frm.dashboard.set_headline(`${statusMessage} ${jobMessage}`);
+				}
+			});
+		}
+
 
 		frappe.call({
 			method: "custom_import_app.custom_import_app.doctype.data_import_custom.data_import_custom.get_import_status",
-			args: {
-				data_import_name: frm.doc.name,
-			},
-			callback: function (r) {
+			args: { data_import_name: frm.doc.name },
+			callback: function(r) {
 				let successful_records = cint(r.message.success);
 				let failed_records = cint(r.message.failed);
 				let total_records = cint(r.message.total_records);
 
-				let action, message;
-				if (frm.doc.import_type === "Insert New Records") {
-					action = "imported";
-				} else {
-					action = "updated";
-				}
+				let action = frm.doc.import_type === "Insert New Records" ? "imported" : "updated";
+				let importMessage;
 
 				if (failed_records === 0) {
-					let message_args = [action, successful_records];
-					if (successful_records === 1) {
-						message = __("Successfully {0} 1 record.", message_args);
-					} else {
-						message = __("Successfully {0} {1} records.", message_args);
-					}
+					importMessage = successful_records === 1
+						? `Successfully ${action} 1 record. out of ${total_records}.`
+						: `Successfully ${action} ${successful_records} records. out of ${total_records}.`;
 				} else {
-					let message_args = [action, successful_records, total_records];
-					if (successful_records === 1) {
-						message = __(
-							"Successfully {0} {1} record out of {2}. Click on Export Errored Rows, fix the errors and import again.",
-							message_args
-						);
-					} else {
-						message = __(
-							"Successfully {0} {1} records out of {2}. Click on Export Errored Rows, fix the errors and import again.",
-							message_args
-						);
-					}
+					importMessage = successful_records === 1
+						? `Successfully ${action} 1 record out of ${total_records}.`
+						: `Successfully ${action} ${successful_records} records out of ${total_records}.`;
 				}
 
-				// If the job timed out, display an extra hint
 				if (r.message.status === "Timed Out") {
-					message += "<br/>" + __("Import timed out, please re-try.");
+					importMessage += "<br/>Import timed out, please re-try.";
 				}
 
-				frm.dashboard.set_headline(message);
-			},
+				let combinedMessage = `${statusMessage} ${jobMessage}`.trim();
+				if (combinedMessage) combinedMessage += " | "; 
+				combinedMessage += importMessage;
+
+				frm.dashboard.set_headline(combinedMessage);
+			}
 		});
 	},
+
 
 	show_report_error_button(frm) {
 		if (frm.doc.status === "Error") {
@@ -752,5 +763,19 @@ frappe.ui.form.on("Data Import Custom", {
 	// 		});
 	// 	}, 2000);
 	// }
+	show_job_id(frm){
+		if (frm.doc.status == "Preprocessing" || frm.doc.status == "Running") {
+			frappe.call({
+				method: "custom_import_app.custom_import_app.doctype.data_import_custom.data_import_custom.get_running_import_job",
+				callback: function(r) {
+					let message = r.message
+						? `Import sedang berjalan… (Job ID: ${r.message})`
+						: "Tidak ada import yang berjalan.";
+					frm.dashboard.set_headline(message);
+				}
+			});
+		}
+
+	}
 
 });

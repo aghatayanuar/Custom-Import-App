@@ -16,6 +16,10 @@ from frappe.utils.background_jobs import enqueue, is_job_enqueued
 from frappe.utils.csvutils import validate_google_sheets_url
 import math
 
+from rq.registry import StartedJobRegistry
+from frappe.utils.background_jobs import get_queues
+from datetime import datetime
+
 
 BLOCKED_DOCTYPES = CORE_DOCTYPES - {"User", "Role", "Print Format"}
 
@@ -725,3 +729,39 @@ def get_import_logs(data_import: str):
     logs = frappe.db.sql(query, (data_import,), as_dict=True)
 
     return logs
+
+@frappe.whitelist()
+def get_running_import_job(data_import_name=None):
+    from rq.registry import StartedJobRegistry
+    from frappe.utils.background_jobs import get_queues
+    from datetime import datetime
+
+    queues = get_queues()
+    q_long_list = [q for q in queues if 'long' in q.name]
+    if not q_long_list:
+        return None
+    q_long = q_long_list[0]
+
+    registry = StartedJobRegistry(queue=q_long)
+
+    for job_id in registry.get_job_ids():
+        job = q_long.fetch_job(job_id)
+        method_name = job.kwargs.get('method', '')
+        job_kwargs = job.kwargs.get('kwargs', {})
+
+        if "process_import_batch" in method_name:
+            if data_import_name and job_kwargs.get('data_import') != data_import_name:
+                continue
+
+            started_at = job.started_at
+            if started_at:
+                now = datetime.utcnow()
+                elapsed = (now - started_at).total_seconds()
+                return {
+                    "job_id": job.id,
+                    "elapsed_seconds": int(elapsed)
+                }
+            else:
+                return {"job_id": job.id, "elapsed_seconds": 0}
+
+    return None
