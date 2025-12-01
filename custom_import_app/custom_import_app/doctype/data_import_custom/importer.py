@@ -522,6 +522,18 @@ class ImportFile:
 			payloads.append(frappe._dict(doc=doc, rows=rows))
 		return payloads
 
+	def get_payloads_for_import_custom(self, start=0, limit=None):
+		payloads = []
+
+		data = list(self.data[start:])
+		while data:
+			doc, rows, data = self.parse_next_row_for_import(data)
+			payloads.append(frappe._dict(doc=doc, rows=rows))
+			
+			if limit is not None and len(payloads) >= limit:
+				break
+		return payloads
+
 	def parse_next_row_for_import(self, data):
 		"""
 		Parses rows that make up a doc. A doc maybe built from a single row or multiple rows.

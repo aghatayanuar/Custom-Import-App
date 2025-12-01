@@ -20,6 +20,12 @@
   "submit_after_import",
   "mute_emails",
   "template_options",
+  "section_break_twle",
+  "current_payload_start",
+  "processed_payloads",
+  "column_break_skwd",
+  "total_payloads",
+  "enqueue_retry",
   "import_warnings_section",
   "template_warnings",
   "import_warnings",
@@ -166,11 +172,44 @@
    "hidden": 1,
    "label": "Payload Count",
    "read_only": 1
+  },
+  {
+   "fieldname": "current_payload_start",
+   "fieldtype": "Int",
+   "label": "current_payload_start (row)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "processed_payloads",
+   "fieldtype": "Int",
+   "label": "processed_payloads (doc)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_payloads",
+   "fieldtype": "Int",
+   "label": "total_payloads (doc)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "enqueue_retry",
+   "fieldtype": "Float",
+   "hidden": 1,
+   "label": "enqueue_retry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_twle",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "column_break_skwd",
+   "fieldtype": "Column Break"
   }
  ],
  "hide_toolbar": 1,
  "links": [],
- "modified": "2025-11-25 14:08:50.658221",
+ "modified": "2025-12-01 11:22:17.894320",
  "modified_by": "Administrator",
  "module": "Custom Import App",
  "name": "Data Import Custom",

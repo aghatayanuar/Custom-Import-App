@@ -366,174 +366,96 @@ def export_csv(doctype, path):
 # 		event="data_import",
 # 		data_import=di.name,
 # 		payload_start=0,
-# 		batch_size=batch_size  
+# 		batch_size=batch_size,
 # 	)
 
 # 	return {"message": "Import job queued, processing in background."}
-
 
 # def process_import_batch(data_import, payload_start: int = 0, batch_size: int = 10):
 # 	di = frappe.get_doc("Data Import Custom", data_import)
 # 	cache = frappe.cache()
 
+# 	if cache.get_value(f"data_import:{di.name}:stop"):
+# 		di.db_set("status", "Stopped")
+# 		finalize_import_status(di.name, stopped=True)
+# 		return
+
+# 	importer = di.get_importer()
+
 # 	if not cache.get_value(f"data_import:{di.name}:total_payloads"):
-# 		importer = di.get_importer()
-# 		data_iter = iter(importer.import_file.data)
-# 		total_payloads = 0
+# 		payloads = importer.import_file.get_payloads_for_import()
+# 		total_payloads = len(payloads)
 
-# 		while True:
-# 			try:
-# 				_, _, data_iter = importer.import_file.parse_next_row_for_import_iterator(data_iter)
-# 				total_payloads += 1
-# 			except StopIteration:
-# 				break
-
-# 		if total_payloads == 0:
-# 			di.db_set("status", "Success")
-# 			frappe.publish_realtime("data_import_refresh", {"data_import": di.name})
-# 			return {"message": "No records to import", "total": 0}
+# 		cache.set_value(f"data_import:{di.name}:payloads", payloads)
+# 		cache.set_value(f"data_import:{di.name}:total_payloads", total_payloads)
+# 		cache.set_value(f"data_import:{di.name}:batch_size", batch_size)
+# 		cache.set_value(f"data_import:{di.name}:processed", 0)
+# 		cache.set_value(f"data_import:{di.name}:log_index", 0)
 
 # 		di.db_set("payload_count", total_payloads)
-
-# 		cache.set_value(f"data_import:{di.name}:total_payloads", total_payloads)
-# 		cache.set_value(f"data_import:{di.name}:batch_size", int(batch_size))
-# 		cache.set_value(f"data_import:{di.name}:processed_payloads", 0)
-# 		cache.set_value(
-# 			f"data_import:{di.name}:total_batches",
-# 			(total_payloads + int(batch_size) - 1) // int(batch_size)
-# 		)
-	
-# 	try:
-
 # 		di.db_set("status", "Running")
-# 		cache_key_payloads = f"data_import:{di.name}:payloads"
-# 		payloads = cache.get_value(cache_key_payloads)
 
-# 		importer = Importer(di.reference_doctype, data_import=di)  
+# 	payloads = cache.get_value(f"data_import:{di.name}:payloads")
+# 	total_payloads = int(cache.get_value(f"data_import:{di.name}:total_payloads"))
+# 	batch_size = int(cache.get_value(f"data_import:{di.name}:batch_size"))
 
-# 		if not payloads:
-# 			payloads = importer.import_file.get_payloads_for_import()
-# 			cache.set_value(cache_key_payloads, payloads)
+# 	payload_end = min(payload_start + batch_size, total_payloads)
+# 	batch_payloads = payloads[payload_start:payload_end]
 
-# 		total_payloads = int(cache.get_value(f"data_import:{di.name}:total_payloads"))
-# 		batch_size = int(cache.get_value(f"data_import:{di.name}:batch_size"))
-# 		total_batches = int(cache.get_value(f"data_import:{di.name}:total_batches"))
+# 	log_index = int(cache.get_value(f"data_import:{di.name}:log_index"))
 
-# 		payload_end = min(payload_start + batch_size, total_payloads)
+# 	for payload in batch_payloads:
 
-# 		batch_payloads = payloads[payload_start:payload_end]
+# 		if cache.get_value(f"data_import:{di.name}:stop"):
+# 			di.db_set("status", "Stopped")
+# 			finalize_import_status(di.name, stopped=True)
+# 			return
 
-# 		batch_index = (payload_start // batch_size) + 1
+# 		try:
+# 			created_doc = importer.process_doc(payload.doc)
 
-# 		log_index_base = frappe.db.count("Data Import Log", {"data_import": di.name}) or 0
+# 			if di.submit_after_import and created_doc.docstatus == 0:
+# 				created_doc.submit()
 
-# 		for payload in batch_payloads:
-			
-# 			if cache.get_value(f"data_import:{di.name}:stop"):
-# 				di.db_set("status", "Stopped")
-# 				finalize_import_status(di.name, stopped=True)
-# 				return
-
-# 			doc = payload.doc
-# 			row_indexes = [r.row_number for r in payload.rows]
-
-# 			try:
-# 				created_doc = importer.process_doc(doc)
-
-# 				if di.submit_after_import and created_doc.docstatus == 0:
-# 					created_doc.submit()
-
-# 				create_import_log(
-# 					di.name,
-# 					log_index_base,
-# 					{
-# 						"success": True,
-# 						"docname": created_doc.name,
-# 						"row_indexes": row_indexes,
-# 					},
-# 				)
-# 				log_index_base += 1
-# 				frappe.db.commit()
-
-# 			except Exception:
-# 				messages = frappe.local.message_log
-# 				frappe.clear_messages()
-# 				frappe.db.rollback()
-
-# 				create_import_log(
-# 					di.name,
-# 					log_index_base,
-# 					{
-# 						"success": False,
-# 						"exception": frappe.get_traceback(),
-# 						"messages": messages,
-# 						"row_indexes": row_indexes,
-# 					},
-# 				)
-# 				log_index_base += 1
-# 				frappe.db.commit()
-
-# 		processed = int(cache.get_value(f"data_import:{di.name}:processed_payloads") or 0)
-# 		processed += len(batch_payloads)
-# 		cache.set_value(f"data_import:{di.name}:processed_payloads", processed)
-
-# 		frappe.publish_realtime(
-# 			"data_import_progress",
-# 			{
-# 				"current": processed,
-# 				"total": total_payloads,
-# 				"data_import": di.name,
-# 				"batch_index": batch_index,
-# 				"total_batches": total_batches,
+# 			create_import_log(di.name, log_index, {
 # 				"success": True,
-# 				"eta": 0,
-# 			}
-# 		)
+# 				"docname": created_doc.name,
+# 				"row_indexes": [r.row_number for r in payload.rows],
+# 			})
 
-# 		if payload_end < total_payloads:
-# 			next_payload_start = payload_end
-# 			enqueue(
-# 				"custom_import_app.custom_import_app.doctype.data_import_custom.data_import_custom.process_import_batch",
-# 				queue="long",
-# 				timeout=30000,
-# 				event="data_import",
-# 				data_import=di.name,
-# 				payload_start=next_payload_start,
-# 			)
-# 		else:
-# 			finalize_import_status(di.name)
+# 			log_index += 1
 
-# 	except JobTimeoutException:
-# 		frappe.db.rollback()
-# 		frappe.get_doc(
-# 			{
-# 				"doctype": "Data Import Log",
-# 				"log_index": frappe.db.count("Data Import Log", {"data_import": di.name}) or 0,
-# 				"success": 0,
-# 				"data_import": di.name,
-# 				"row_indexes": "[]",
-# 				"messages": "[]",
-# 				"exception": "Batch timed out",
-# 			}
-# 		).db_insert()
-# 		frappe.db.commit()
-# 		finalize_import_status(di.name, timed_out=True)
-
-# 	except Exception:
-# 		frappe.db.rollback()
-# 		frappe.get_doc(
-# 			{
-# 				"doctype": "Data Import Log",
-# 				"log_index": frappe.db.count("Data Import Log", {"data_import": di.name}) or 0,
-# 				"success": 0,
-# 				"data_import": di.name,
-# 				"row_indexes": "[]",
-# 				"messages": "[]",
+# 		except Exception:
+# 			create_import_log(di.name, log_index, {
+# 				"success": False,
 # 				"exception": frappe.get_traceback(),
-# 			}
-# 		).db_insert()
-# 		frappe.db.commit()
-# 		finalize_import_status(di.name, error=True)
+# 				"row_indexes": [r.row_number for r in payload.rows],
+# 			})
+
+# 			log_index += 1
+
+# 	cache.set_value(f"data_import:{di.name}:log_index", log_index)
+
+# 	frappe.db.commit()
+
+# 	processed = int(cache.get_value(f"data_import:{di.name}:processed") or 0) + len(batch_payloads)
+# 	cache.set_value(f"data_import:{di.name}:processed", processed)
+
+# 	frappe.publish_realtime("data_import_progress", {
+# 		"current": processed,
+# 		"total": total_payloads,
+# 		"data_import": di.name,
+# 	})
+
+# 	if cache.get_value(f"data_import:{di.name}:stop"):
+# 		di.db_set("status", "Stopped")
+# 		finalize_import_status(di.name, stopped=True)
+# 		return
+
+# 	if payload_end < total_payloads and not cache.get_value(f"data_import:{di.name}:stop"):
+# 		enqueue_batch(di.name, payload_end, batch_size=batch_size)
+# 	else:
+# 		finalize_import_status(di.name)
 
 @frappe.whitelist()
 def form_start_import(data_import: str, batch_size: int = 25):
@@ -541,6 +463,9 @@ def form_start_import(data_import: str, batch_size: int = 25):
 	di.check_permission("write")
 
 	di.db_set("status", "Preprocessing")
+	di.db_set("current_payload_start", 0)
+	di.db_set("processed_payloads", 0)
+	di.db_set("enqueue_retry", 0)
 
 	enqueue(
 		"custom_import_app.custom_import_app.doctype.data_import_custom.data_import_custom.process_import_batch",
@@ -554,6 +479,16 @@ def form_start_import(data_import: str, batch_size: int = 25):
 
 	return {"message": "Import job queued, processing in background."}
 
+
+def count_total_payloads(import_file):
+	count = 0
+	data = list(import_file.data)
+	while data:
+		_, rows, data = import_file.parse_next_row_for_import(data)
+		count += 1
+	return count
+
+
 def process_import_batch(data_import, payload_start: int = 0, batch_size: int = 10):
 	di = frappe.get_doc("Data Import Custom", data_import)
 	cache = frappe.cache()
@@ -565,32 +500,22 @@ def process_import_batch(data_import, payload_start: int = 0, batch_size: int = 
 
 	importer = di.get_importer()
 
-	if not cache.get_value(f"data_import:{di.name}:total_payloads"):
-		payloads = importer.import_file.get_payloads_for_import()
-		total_payloads = len(payloads)
-
-		cache.set_value(f"data_import:{di.name}:payloads", payloads)
-		cache.set_value(f"data_import:{di.name}:total_payloads", total_payloads)
-		cache.set_value(f"data_import:{di.name}:batch_size", batch_size)
-		cache.set_value(f"data_import:{di.name}:processed", 0)
-		cache.set_value(f"data_import:{di.name}:log_index", 0)
-
-		di.db_set("payload_count", total_payloads)
+	if not di.total_payloads:
+		total = count_total_payloads(importer.import_file)
+		di.db_set("total_payloads", total)
 		di.db_set("status", "Running")
+	else:
+		total = di.total_payloads
 
-	payloads = cache.get_value(f"data_import:{di.name}:payloads")
-	total_payloads = int(cache.get_value(f"data_import:{di.name}:total_payloads"))
-	batch_size = int(cache.get_value(f"data_import:{di.name}:batch_size"))
+	start = di.current_payload_start or 0
+	processed = di.processed_payloads or 0
 
-	payload_end = min(payload_start + batch_size, total_payloads)
-	batch_payloads = payloads[payload_start:payload_end]
+	payloads = importer.import_file.get_payloads_for_import_custom(start=start, limit=batch_size)
 
-	log_index = int(cache.get_value(f"data_import:{di.name}:log_index"))
+	log_index = frappe.db.get_value("Data Import Log", {"data_import": di.name}, "MAX(log_index)") or 0
 
-	for payload in batch_payloads:
-
-		if cache.get_value(f"data_import:{di.name}:stop"):
-			di.db_set("status", "Stopped")
+	for payload in payloads:
+		if frappe.cache().get_value(f"data_import:{di.name}:stop"):
 			finalize_import_status(di.name, stopped=True)
 			return
 
@@ -605,7 +530,6 @@ def process_import_batch(data_import, payload_start: int = 0, batch_size: int = 
 				"docname": created_doc.name,
 				"row_indexes": [r.row_number for r in payload.rows],
 			})
-
 			log_index += 1
 
 		except Exception:
@@ -614,39 +538,56 @@ def process_import_batch(data_import, payload_start: int = 0, batch_size: int = 
 				"exception": frappe.get_traceback(),
 				"row_indexes": [r.row_number for r in payload.rows],
 			})
-
 			log_index += 1
-
-	cache.set_value(f"data_import:{di.name}:log_index", log_index)
 
 	frappe.db.commit()
 
-	processed = int(cache.get_value(f"data_import:{di.name}:processed") or 0) + len(batch_payloads)
-	cache.set_value(f"{di.name}:processed", processed)
+	last_log = frappe.db.sql(
+		"SELECT row_indexes FROM `tabData Import Log` WHERE data_import = %s ORDER BY log_index DESC LIMIT 1",
+		(di.name,), as_dict=True
+	)
 
-	frappe.publish_realtime("data_import_progress", {
-		"current": processed,
-		"total": total_payloads,
-		"data_import": di.name,
-	})
+	processed += len(payloads)
+	if last_log:
+		row_indexes = frappe.parse_json(last_log[0]['row_indexes'])
+		new_start = max(row_indexes) - 1 #kurangin satu untuk header
 
-	if cache.get_value(f"data_import:{di.name}:stop"):
-		di.db_set("status", "Stopped")
-		finalize_import_status(di.name, stopped=True)
+	di.db_set("processed_payloads", processed)
+	di.db_set("current_payload_start", new_start)
+
+	if processed >= total:
+		finalize_import_status(di.name)
 		return
 
+	enqueue_batch(di.name, batch_size=batch_size)
 
-	if payload_end < total_payloads:
+
+def enqueue_batch(di_name, batch_size=25, max_retry=5):
+	di = frappe.get_doc("Data Import Custom", di_name)
+	retries = di.enqueue_retry or 0
+
+	if retries >= max_retry:
+		frappe.log_error(f"Max enqueue retry reached (doc={di_name})", "Data Import Auto-Retry")
+		return
+
+	try:
 		enqueue(
 			"custom_import_app.custom_import_app.doctype.data_import_custom.data_import_custom.process_import_batch",
 			queue="long",
 			timeout=30000,
 			event="data_import",
-			data_import=di.name,
-			payload_start=payload_end,
+			data_import=di_name,
+			batch_size=batch_size
 		)
-	else:
-		finalize_import_status(di.name)
+	except Exception:
+		di.db_set("enqueue_retry", retries + 1)
+		frappe.enqueue(
+			enqueue_batch,
+			queue="long",
+			di_name=di_name,
+			batch_size=batch_size,
+			max_retry=max_retry
+		)
 
 
 @frappe.whitelist()
@@ -656,21 +597,15 @@ def stop_import(data_import: str):
 
 	frappe.db.set_value("Data Import Custom", data_import, "status", "Stopped")
 
-	frappe.publish_realtime("data_import_progress", {
-		"data_import": data_import,
-		"status": "Stopped"
-	})
-
 	return {"message": "Import Stopped..."}
 
 
 def finalize_import_status(data_import_name: str, timed_out: bool = False, error: bool = False, stopped: bool = False):
-
 	di = frappe.get_doc("Data Import Custom", data_import_name)
 	cache = frappe.cache()
 
-	total_payloads = int(cache.get_value(f"data_import:{di.name}:total_payloads") or 0)
-	processed = int(cache.get_value(f"data_import:{di.name}:processed_payloads") or 0)
+	total = di.total_payloads or 0
+	processed = di.processed_payloads or 0
 
 	logs = frappe.get_all(
 		"Data Import Log",
@@ -692,43 +627,74 @@ def finalize_import_status(data_import_name: str, timed_out: bool = False, error
 	elif stopped:
 		final_status = "Stopped"
 		cache.delete_value(f"data_import:{di.name}:stop")
-	elif error and failures == total_payloads:
+	elif error and failures == total:
 		final_status = "Error"
 	elif failures > 0 and successes > 0:
 		final_status = "Partial Success"
-	elif successes == total_payloads:
+	elif successes == total:
 		final_status = "Success"
 	else:
-		final_status = "Partial Success" if successes > 0 else "Error"
+		final_status = "Error"
 
 	di.db_set("status", final_status)
-
-	cache.set_value(f"data_import:{di.name}:total_payloads", None)
-	cache.set_value(f"data_import:{di.name}:batch_size", None)
-	cache.set_value(f"data_import:{di.name}:processed_payloads", None)
-	cache.set_value(f"data_import:{di.name}:total_batches", None)
-
-	frappe.publish_realtime("data_import_refresh", {"data_import": di.name})
+	di.db_set("enqueue_retry", 0)
 
 
 @frappe.whitelist()
 def get_import_logs(data_import: str):
-    frappe.get_doc("Data Import Custom", data_import).check_permission("read")
+	frappe.get_doc("Data Import Custom", data_import).check_permission("read")
 
-    query = """
-        SELECT
-            success,
-            docname,
-            messages,
-            exception,
-            row_indexes
-        FROM `tabData Import Log`
-        WHERE data_import = %s
-        ORDER BY log_index DESC
-    """
-    logs = frappe.db.sql(query, (data_import,), as_dict=True)
+	query = """
+		SELECT
+			success,
+			docname,
+			messages,
+			exception,
+			row_indexes
+		FROM `tabData Import Log`
+		WHERE data_import = %s
+		ORDER BY log_index DESC
+	"""
+	logs = frappe.db.sql(query, (data_import,), as_dict=True)
 
-    return logs
+	return logs
+
+# @frappe.whitelist()
+# def get_running_import_job(data_import_name=None):
+#     from rq.registry import StartedJobRegistry
+#     from frappe.utils.background_jobs import get_queues
+#     from datetime import datetime
+
+#     queues = get_queues()
+#     q_long_list = [q for q in queues if 'long' in q.name]
+#     if not q_long_list:
+#         return None
+#     q_long = q_long_list[0]
+
+#     registry = StartedJobRegistry(queue=q_long)
+
+#     for job_id in registry.get_job_ids():
+#         job = q_long.fetch_job(job_id)
+#         method_name = job.kwargs.get('method', '')
+#         job_kwargs = job.kwargs.get('kwargs', {})
+
+#         if "process_import_batch" in method_name:
+#             if data_import_name and job_kwargs.get('data_import') != data_import_name:
+#                 continue
+
+#             started_at = job.started_at
+#             if started_at:
+#                 now = datetime.utcnow()
+#                 elapsed = (now - started_at).total_seconds()
+#                 return {
+#                     "job_id": job.id,
+#                     "elapsed_seconds": int(elapsed)
+#                 }
+#             else:
+#                 return {"job_id": job.id, "elapsed_seconds": 0}
+
+#     return None
+
 
 @frappe.whitelist()
 def get_running_import_job(data_import_name=None):
@@ -743,25 +709,32 @@ def get_running_import_job(data_import_name=None):
     q_long = q_long_list[0]
 
     registry = StartedJobRegistry(queue=q_long)
+    running_jobs = []
 
     for job_id in registry.get_job_ids():
         job = q_long.fetch_job(job_id)
+        if not job:
+            continue
+
         method_name = job.kwargs.get('method', '')
         job_kwargs = job.kwargs.get('kwargs', {})
 
-        if "process_import_batch" in method_name:
-            if data_import_name and job_kwargs.get('data_import') != data_import_name:
-                continue
+        if "process_import_batch" not in method_name:
+            continue
 
-            started_at = job.started_at
-            if started_at:
-                now = datetime.utcnow()
-                elapsed = (now - started_at).total_seconds()
-                return {
-                    "job_id": job.id,
-                    "elapsed_seconds": int(elapsed)
-                }
-            else:
-                return {"job_id": job.id, "elapsed_seconds": 0}
+        if data_import_name and job_kwargs.get('data_import') != data_import_name:
+            continue
 
-    return None
+        started_at = job.started_at
+        elapsed_seconds = 0
+        if started_at:
+            now = datetime.utcnow()
+            elapsed_seconds = int((now - started_at).total_seconds())
+
+        running_jobs.append({
+            "job_id": job.id,
+            "elapsed_seconds": elapsed_seconds,
+            "data_import": job_kwargs.get('data_import')
+        })
+
+    return running_jobs[0] if running_jobs else None
