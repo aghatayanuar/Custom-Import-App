@@ -482,98 +482,6 @@ frappe.ui.form.on("Data Import Custom", {
 		frm.trigger("show_import_log");
 	},
 
-	// render_import_log(frm) {
-	// 	frappe.call({
-	// 		method: "custom_import_app.custom_import_app.doctype.data_import_custom.data_import_custom.get_import_logs",
-	// 		args: {
-	// 			data_import: frm.doc.name,
-	// 		},
-	// 		callback: function (r) {
-	// 			let logs = r.message;
-
-	// 			if (logs.length === 0) return;
-
-	// 			frm.toggle_display("import_log_section", true);
-
-	// 			let rows = logs
-	// 				.map((log) => {
-	// 					let html = "";
-	// 					if (log.success) {
-	// 						if (frm.doc.import_type === "Insert New Records") {
-	// 							html = __("Successfully imported {0}", [
-	// 								`<span class="underline">${frappe.utils.get_form_link(
-	// 									frm.doc.reference_doctype,
-	// 									log.docname,
-	// 									true
-	// 								)}<span>`,
-	// 							]);
-	// 						} else {
-	// 							html = __("Successfully updated {0}", [
-	// 								`<span class="underline">${frappe.utils.get_form_link(
-	// 									frm.doc.reference_doctype,
-	// 									log.docname,
-	// 									true
-	// 								)}<span>`,
-	// 							]);
-	// 						}
-	// 					} else {
-	// 						let messages = JSON.parse(log.messages || "[]")
-	// 							.map((m) => {
-	// 								let title = m.title ? `<strong>${m.title}</strong>` : "";
-	// 								let message = m.message ? `<div>${m.message}</div>` : "";
-	// 								return title + message;
-	// 							})
-	// 							.join("");
-	// 						let id = frappe.dom.get_unique_id();
-	// 						html = `${messages}
-	// 							<button class="btn btn-default btn-xs" type="button" data-toggle="collapse" data-target="#${id}" aria-expanded="false" aria-controls="${id}" style="margin-top: 15px;">
-	// 								${__("Show Traceback")}
-	// 							</button>
-	// 							<div class="collapse" id="${id}" style="margin-top: 15px;">
-	// 								<div class="well">
-	// 									<pre>${log.exception}</pre>
-	// 								</div>
-	// 							</div>`;
-	// 					}
-	// 					let indicator_color = log.success ? "green" : "red";
-	// 					let title = log.success ? __("Success") : __("Failure");
-
-	// 					if (frm.doc.show_failed_logs && log.success) {
-	// 						return "";
-	// 					}
-
-	// 					return `<tr>
-	// 						<td>${JSON.parse(log.row_indexes).join(", ")}</td>
-	// 						<td>
-	// 							<div class="indicator ${indicator_color}">${title}</div>
-	// 						</td>
-	// 						<td>
-	// 							${html}
-	// 						</td>
-	// 					</tr>`;
-	// 				})
-	// 				.join("");
-
-	// 			if (!rows && frm.doc.show_failed_logs) {
-	// 				rows = `<tr><td class="text-center text-muted" colspan=3>
-	// 					${__("No failed logs")}
-	// 				</td></tr>`;
-	// 			}
-
-	// 			frm.get_field("import_log_preview").$wrapper.html(`
-	// 				<table class="table table-bordered">
-	// 					<tr class="text-muted">
-	// 						<th width="10%">${__("Row Number")}</th>
-	// 						<th width="10%">${__("Status")}</th>
-	// 						<th width="80%">${__("Message")}</th>
-	// 					</tr>
-	// 					${rows}
-	// 				</table>
-	// 			`);
-	// 		},
-	// 	});
-	// },
-
 	render_import_log(frm) {
 		frappe.call({
 			method: "custom_import_app.custom_import_app.doctype.data_import_custom.data_import_custom.get_import_logs",
@@ -593,24 +501,38 @@ frappe.ui.form.on("Data Import Custom", {
 				let tableData = logs
 					.filter(log => !(frm.doc.show_failed_logs && log.success))
 					.map(log => {
-						let row_numbers = JSON.parse(log.row_indexes).join(", ");
+						let row_numbers = "";
+						try {
+							row_numbers = JSON.parse(log.row_indexes).join(", ");
+						} catch (e) {
+							row_numbers = log.row_indexes || "";
+						}
+
 						let color = log.success ? "green" : "red";
 
 						let message = "";
 						let reference_link = "";
+
 						if (log.success) {
 							message = frm.doc.import_type === "Insert New Records"
 								? `Successfully imported ${log.docname}`
 								: `Successfully updated ${log.docname}`;
 							reference_link = frappe.utils.get_form_link(frm.doc.reference_doctype, log.docname, true);
 						} else {
-							let messages = JSON.parse(log.messages || "[]")
-								.map(m => {
-									let title = m.title ? `<strong>${m.title}</strong>` : "";
-									let msg = m.message ? `<div>${m.message}</div>` : "";
-									return title + msg;
-								})
-								.join("");
+							let messagesArray;
+							try {
+								messagesArray = JSON.parse(log.messages || "[]");
+								if (!Array.isArray(messagesArray)) messagesArray = [messagesArray];
+							} catch(e) {
+								messagesArray = [log.messages || ""];
+							}
+
+							let messages = messagesArray.map(m => {
+								let title = m.title ? `<strong>${m.title}</strong>` : "";
+								let msg = m.message ? `<div>${m.message}</div>` : "";
+								return title + msg;
+							}).join("");
+
 							let id = frappe.dom.get_unique_id();
 							message = `${messages}
 								<div class="collapse" id="${id}" style="margin-top: 10px;">
@@ -640,7 +562,7 @@ frappe.ui.form.on("Data Import Custom", {
 						{ title: __("Row Number"), field: "row_numbers", width: 120, 
 							headerFilter:"input",
 							headerFilterParams:{ elementAttributes:{ class:"form-control input-xs" } }
-						 },
+						},
 						{ 
 							title: __("Status"), 
 							field: "status", 
@@ -665,8 +587,7 @@ frappe.ui.form.on("Data Import Custom", {
 							formatter: "html",
 							formatterParams: {
 								html: function(cell) {
-									let val = cell.getValue();
-									return val;
+									return cell.getValue();
 								}
 							},
 							headerFilter:"input",
@@ -694,8 +615,6 @@ frappe.ui.form.on("Data Import Custom", {
 							headerFilter:"input",
 							headerFilterParams:{ elementAttributes:{ class:"form-control input-xs" } }
 						}
-
-
 					],
 					movableColumns: true,
 					resizableRows: true,
