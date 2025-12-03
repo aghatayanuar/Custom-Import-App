@@ -283,6 +283,10 @@ frappe.ui.form.on("Data Import Custom", {
 		}).then((r) => {
 			frm.disable_save();
 		});
+
+		setTimeout(() => {
+			frm.reload_doc();
+		}, 1000);
 	},
 
 
