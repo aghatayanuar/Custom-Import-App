@@ -104,7 +104,7 @@ frappe.ui.form.on("Data Import Custom", {
                     callback() {
                         frappe.show_alert("Stopping import...");
 
-						setTimeout(() => frm.refresh(), 3000);
+						setTimeout(() => frm.reload_doc(), 3000);
                     }
                 });
             });
